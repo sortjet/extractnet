@@ -90,7 +90,7 @@ cdef string MIN_DEPTH_SINCE_LAST_BLOCK = <string>'min_depth_since_last_block'
 
 # for the class/id readability score
 re_readability_negative = re.compile('combx|comment|com-|contact|foot|footer|footnote|masthead|media|outbrain|promo|related|scroll|shoutbox|sidebar|sponsor|shopping|tags|tool|widget', re.I)
-re_readability_positive = re.compile('article|body|content|entry|hentry|main|page|pagination|author|publishedAt|published|publish-|date-|post|text|blog|story', re.I)
+re_readability_positive = re.compile('article|body|content|entry|hentry|main|page|pagination|author|publishedAt|published|publish-|post|text|blog|story', re.I)
 
 cdef string DIV = <string>'div'
 

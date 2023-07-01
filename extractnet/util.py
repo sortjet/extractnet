@@ -10,17 +10,16 @@ from __future__ import division
 import os
 from sklearn.pipeline import FeatureUnion, make_union
 import ftfy
-import dateparser
-import regex # use by dateparser
+import regex  # use by dateparser
 
 from .compat import range_, string_
 from .features import get_feature
 from .sequence_tagger.models import NON_WORD_CHAR
 # for sanity check function
-from .metadata_extraction.url_utils import validate_date
 
 get_module_res = lambda *res: os.path.normpath(os.path.join(
     os.getcwd(), os.path.dirname(__file__), *res))
+
 
 def dameraulevenshtein(seq1, seq2):
     """Calculate the Damerau-Levenshtein distance between sequences.
@@ -160,19 +159,20 @@ def convert_segmentation_to_text(pred_label, text):
     for idx, char in enumerate(text):
         if pred_label[idx] == 'B':
             if len(name) > 0:
-                names.append(NON_WORD_CHAR.sub('',name).strip())
+                names.append(NON_WORD_CHAR.sub('', name).strip())
                 name = ''
             name += char
         elif pred_label[idx] == 'I':
             name += char
-        else: # O
+        else:  # O
             if len(name) > 0:
-                names.append(NON_WORD_CHAR.sub('',name).strip())
+                names.append(NON_WORD_CHAR.sub('', name).strip())
                 name = ''
     if len(name) > 0 and NON_WORD_CHAR.sub('', name):
         names.append(NON_WORD_CHAR.sub('', name).strip())
 
     return names
+
 
 def fix_encoding(text):
     if isinstance(text, str):
@@ -184,7 +184,7 @@ def fix_encoding(text):
                 return text
         return text
     elif isinstance(text, list):
-        return [ ftfy.fix_text(ftfy.fix_encoding(t)) for t in text ]
+        return [ftfy.fix_text(ftfy.fix_encoding(t)) for t in text]
 
 
 def merge_results(r1, r2):
@@ -202,6 +202,7 @@ def merge_results(r1, r2):
             r1[key] += r2[key]
     return r1
 
+
 def remove_empty_keys(r1):
     if r1 is None:
         return {}
@@ -217,17 +218,8 @@ def priority_merge(x, main):
     z.update(main)
     return z
 
-def attribute_sanity_check(content, **kwargs):
-    if 'date' in content and isinstance(content['date'], str):
-        date = content['date']
-        try:
-            content['date'] = dateparser.parse(date)
-        except regex._regex_core.error:
-            pass
 
-    if 'url' in kwargs and 'date' in content:
-        url = kwargs['url']
-        content['date'] = validate_date(url, content['date'])
+def attribute_sanity_check(content, **kwargs):
 
     if 'author' in content and isinstance(content['author'], list):
         author_str = ','.join(content['author'])

@@ -12,7 +12,6 @@ import itertools
 import logging
 import re
 import json
-from htmldate import find_date
 from lxml import html
 from urllib.parse import ParseResult
 from .json_ld import extract_json_parse_error, extract_json
@@ -20,12 +19,12 @@ from .url_utils import url_normalizer, extract_domain, url_is_valid
 from .metaxpaths import author_xpaths, categories_xpaths, tags_xpaths, title_xpaths
 from .video import get_advance_fields
 from .utils import (
-    load_html, trim, split_tags, check_authors, unescape, 
+    load_html, trim, split_tags, check_authors, unescape,
     line_processing, normalize_authors, normalize_tags
 )
 from .constant import (
     TEXT_LICENSE_REGEX, LICENSE_REGEX,
-    METADATA_LIST, TITLE_REGEX,  HTMLDATE_CONFIG_EXTENSIVE, HTMLDATE_CONFIG_FAST,
+    METADATA_LIST, TITLE_REGEX,
     JSON_MINIFY, TEXT_AUTHOR_PATTERNS, URL_COMP_CHECK, BLACKLIST_AUTHOR,
     PROPERTY_AUTHOR, METANAME_AUTHOR, METANAME_DESCRIPTION, METANAME_PUBLISHER,
     TWITTER_ATTRS, METANAME_TAG, EXTRA_META, METANAME_TITLE
@@ -41,6 +40,7 @@ def criteria_fulfilled(metadata):
     if all([metadata['author'], metadata['sitename'], metadata['categories'], metadata['title'], metadata['name']]):
         return True
     return False
+
 
 def extract_meta_json(tree, metadata):
     '''Parse and extract metadata from JSON-LD data'''
@@ -60,7 +60,6 @@ def extract_meta_json(tree, metadata):
     return metadata
 
 
-
 def extract_json_author(elemtext, regular_expression):
     '''Crudely extract author names from JSON-LD data'''
     json_authors = list()
@@ -77,9 +76,6 @@ def extract_json_author(elemtext, regular_expression):
     if json_authors:
         return '; '.join(json_authors).strip('; ')
     return None
-
-
-
 
 
 def extract_opengraph(tree):
@@ -109,10 +105,10 @@ def extract_opengraph(tree):
         elif elem.get('property') in ('og:author', 'og:article:author'):
             author = elem.get('content')
         # og:type
-        #elif elem.get('property') == 'og:type':
+        # elif elem.get('property') == 'og:type':
         #    pagetype = elem.get('content')
         # og:locale
-        #elif elem.get('property') == 'og:locale':
+        # elif elem.get('property') == 'og:locale':
         #    pagelocale = elem.get('content')
     return trim(title), trim(author), trim(url), trim(description), trim(site_name), og_full_property
 
@@ -124,10 +120,12 @@ def examine_meta(tree):
     metadata = dict.fromkeys(METADATA_LIST)
     og_properties = {}
     # bootstrap from potential OpenGraph tags
-    title, author, url, description, site_name, og_full_property = extract_opengraph(tree)
+    title, author, url, description, site_name, og_full_property = extract_opengraph(
+        tree)
     # test if all return values have been assigned
     if all((title, author, url, description, site_name)):  # if they are all defined
-        metadata['title'], metadata['author'], metadata['url'], metadata['description'], metadata['sitename'] = title, author, url, description, site_name
+        metadata['title'], metadata['author'], metadata['url'], metadata[
+            'description'], metadata['sitename'] = title, author, url, description, site_name
         metadata['og_properties'] = og_full_property
         return metadata
     # skim through meta tags
@@ -183,7 +181,8 @@ def examine_meta(tree):
         # other types
         else:
             if not 'charset' in elem.attrib and not 'http-equiv' in elem.attrib and not 'property' in elem.attrib:
-                LOGGER.debug(html.tostring(elem, pretty_print=False, encoding='unicode').strip())
+                LOGGER.debug(html.tostring(
+                    elem, pretty_print=False, encoding='unicode').strip())
     if site_name is None and backup_sitename is not None:
         site_name = backup_sitename
 
@@ -193,7 +192,7 @@ def examine_meta(tree):
         'title': title,
         'author': author,
         'url': url,
-        'description':description,
+        'description': description,
         'site_name': site_name,
         'tags': tags_,
         'og_properties': og_properties
@@ -266,6 +265,7 @@ def parse_license_element(element, strict=False):
             return match[0]
     return None
 
+
 def extract_license(tree):
     '''Search the HTML code for license information and parse it.'''
     result = None
@@ -284,22 +284,26 @@ def extract_license(tree):
                 break
     return result
 
+
 def extract_author(tree):
     '''Extract the document author(s)'''
     author = extract_metainfo(tree, author_xpaths, len_limit=75)
     if author:
         # simple filters for German and English
-        author = re.sub(r'^([a-zäöüß]+(ed|t))? ?(by|von) ', '', author, flags=re.IGNORECASE)
+        author = re.sub(r'^([a-zäöüß]+(ed|t))? ?(by|von) ',
+                        '', author, flags=re.IGNORECASE)
         author = re.sub(r'\d.+?$', '', author)
         author = re.sub(r'[^\w]+$|( am| on)', '', trim(author))
         author = author.title()
     if author is None:
         for text_author_pattern in TEXT_AUTHOR_PATTERNS:
-            matches = tree.re_xpath("//*[re:match( text(), '{}' )]".format(text_author_pattern))
+            matches = tree.re_xpath(
+                "//*[re:match( text(), '{}' )]".format(text_author_pattern))
             if len(matches) > 0:
                 match_text = matches[0].text
                 try:
-                    author = re.search(text_author_pattern, match_text).group(0)
+                    author = re.search(text_author_pattern,
+                                       match_text).group(0)
                 except TypeError:
                     continue
                 else:
@@ -317,14 +321,15 @@ def extract_url(tree, default_url=None):
     element = tree.find('.//head//link[@rel="canonical"]')
     if element is not None and \
         'href' in element.attrib and \
-        URL_COMP_CHECK.match(element.attrib['href']):
+            URL_COMP_CHECK.match(element.attrib['href']):
         url = element.attrib['href']
     # try default language link
     else:
         for element in tree.iterfind('.//head//link[@rel="alternate"]'):
             if 'hreflang' in element.attrib and element.attrib['hreflang'] is not None and element.attrib['hreflang'] == 'x-default':
                 if URL_COMP_CHECK.match(element.attrib['href']):
-                    LOGGER.debug(html.tostring(element, pretty_print=False, encoding='unicode').strip())
+                    LOGGER.debug(html.tostring(
+                        element, pretty_print=False, encoding='unicode').strip())
                     url = element.attrib['href']
     # add domain name if it's missing
     if url is not None and url.startswith('/'):
@@ -336,7 +341,8 @@ def extract_url(tree, default_url=None):
             else:
                 continue
             if attrtype.startswith('og:') or attrtype.startswith('twitter:'):
-                domain_match = re.match(r'https?://[^/]+', element.attrib['content'])
+                domain_match = re.match(
+                    r'https?://[^/]+', element.attrib['content'])
                 if domain_match:
                     # prepend URL
                     url = domain_match.group(0) + url
@@ -387,11 +393,12 @@ def extract_catstags(metatype, tree):
         element = tree.find('.//head//meta[@property="article:section"]')
         if element is not None:
             results.append(element.attrib['content'])
-    tags = list(itertools.chain.from_iterable([split_tags(trim(x)) for x in results if x is not None]))
+    tags = list(itertools.chain.from_iterable(
+        [split_tags(trim(x)) for x in results if x is not None]))
     return tags
 
 
-def extract_metadata(filecontent, default_url=None, date_config=None, fastmode=False, author_blacklist=BLACKLIST_AUTHOR):
+def extract_metadata(filecontent, default_url=None, fastmode=False, author_blacklist=BLACKLIST_AUTHOR):
     """Main process for metadata extraction.
     Args:
         filecontent: HTML code as string.
@@ -422,7 +429,8 @@ def extract_metadata(filecontent, default_url=None, date_config=None, fastmode=F
             else:
                 metadata[field] = None
     if metadata['author'] is not None and len(author_blacklist) > 0:
-        metadata['author'] = check_authors(metadata['author'], author_blacklist)
+        metadata['author'] = check_authors(
+            metadata['author'], author_blacklist)
     if metadata['author'] is None or URL_COMP_CHECK.match(metadata['author']):
         metadata['author'] = extract_author(tree)
     # fix: try json-ld metadata and override
@@ -441,14 +449,6 @@ def extract_metadata(filecontent, default_url=None, date_config=None, fastmode=F
     if metadata['url'] is not None:
         metadata['hostname'] = extract_domain(metadata['url'])
     # extract date with external module htmldate
-    if date_config is None:
-        # decide on fast mode HTMLDATE_CONFIG_EXTENSIVE, HTMLDATE_CONFIG_FAST
-        if fastmode is False:
-            date_config = HTMLDATE_CONFIG_EXTENSIVE
-        else:
-            date_config = HTMLDATE_CONFIG_FAST
-    date_config['url'] = metadata['url']
-    metadata['date'] = find_date(tree, **date_config)
 
     if isinstance(metadata['sitename'], list):
         metadata['sitename'] = metadata['sitename'][0]
@@ -466,12 +466,14 @@ def extract_metadata(filecontent, default_url=None, date_config=None, fastmode=F
         except IndexError:
             LOGGER.warning('sitename extraction error')
             if metadata['url']:
-                url_link_match = re.match(r'https?://(?:www\.|w[0-9]+\.)?([^/]+)', metadata['url'])
+                url_link_match = re.match(
+                    r'https?://(?:www\.|w[0-9]+\.)?([^/]+)', metadata['url'])
                 if url_link_match:
                     metadata['sitename'] = url_link_match.group(1)
 
     elif metadata['url']:
-        url_link_match = re.match(r'https?://(?:www\.|w[0-9]+\.)?([^/]+)', metadata['url'])
+        url_link_match = re.match(
+            r'https?://(?:www\.|w[0-9]+\.)?([^/]+)', metadata['url'])
         if url_link_match:
             metadata['sitename'] = url_link_match.group(1)
 
@@ -502,4 +504,3 @@ def clean_and_trim(metadata):
             value = line_processing(unescape(value))
             metadata[key] = value
     return metadata
-

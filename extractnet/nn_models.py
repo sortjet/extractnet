@@ -8,12 +8,13 @@ from .blocks import TagCountReadabilityBlockifier
 
 EMPTY_HTML = "<article><p>content</p><p>blocked</p><p>404</p></article>"
 
+
 class NewsNet():
     '''
         Inputs 
     '''
     # order must be fixed
-    label_order = ('content', 'author', 'headline', 'breadcrumbs', 'date')
+    label_order = ('content', 'author', 'headline', 'breadcrumbs')
 
     BASE_FEAT_SIZE = 9
 
@@ -22,22 +23,22 @@ class NewsNet():
 
     def __init__(self, model_weight=None, cls_threshold=0.1, binary_threshold=0.5):
         self.feature_transform = get_and_union_features(self.feats)
-        model_weight = get_module_res('models/news_net.onnx') if model_weight is None else model_weight
+        model_weight = get_module_res(
+            'models/news_net.onnx') if model_weight is None else model_weight
         self.ort_session = ort.InferenceSession(model_weight)
         self.binary_threshold = binary_threshold
         self.cls_threshold = cls_threshold
 
-
     def preprocess(self, html):
         blocks = TagCountReadabilityBlockifier.blockify(html, encoding='utf-8')
-        if len(blocks) == 0: # warning failed extraction
-            blocks = TagCountReadabilityBlockifier.blockify(EMPTY_HTML, encoding='utf-8')
-        elif len(blocks) < 3: # pad block
+        if len(blocks) == 0:  # warning failed extraction
+            blocks = TagCountReadabilityBlockifier.blockify(
+                EMPTY_HTML, encoding='utf-8')
+        elif len(blocks) < 3:  # pad block
             blocks = [blocks[0]]+blocks + [blocks[-1]]
         blocks = np.array(blocks)
         feat = self.feature_transform.transform(blocks).astype(np.float32)
         return feat, blocks
-
 
     def predict(self, html, top_rank=10):
         '''
@@ -46,7 +47,7 @@ class NewsNet():
         '''
         single = False
         if isinstance(html, list):
-            x, css, blocks= [], [], []
+            x, css, blocks = [], [], []
             for html_ in html:
                 feat, block = self.preprocess(html_)
                 x.append(feat[:, :self.BASE_FEAT_SIZE])
@@ -61,7 +62,7 @@ class NewsNet():
             css = np.array([feat[:, self.BASE_FEAT_SIZE:]])
             blocks = [block]
 
-        inputs_onnx = { 'input': x, 'css': css }
+        inputs_onnx = {'input': x, 'css': css}
 
         logits = self.ort_session.run(None, inputs_onnx)[0]
         decoded = self.decode_output(logits, blocks, top_rank=top_rank)
@@ -73,19 +74,21 @@ class NewsNet():
             output = {}
             blocks = doc_blocks[jdx]
             for idx, label in enumerate(self.label_order):
-                if label in ['author', 'date', 'breadcrumbs']:
+                if label in ['author', 'breadcrumbs']:
                     top_k = min(top_rank, len(preds[:, idx]))
                     scores = softmax([preds[:, idx]])[0]
                     ind = np.argpartition(preds[:, idx], -top_k)[-top_k:]
-                    result = [ (fix_encoding(str_cast(blocks[idx].text)), scores[idx]) for idx in ind if scores[idx] > self.cls_threshold]
+                    result = [(fix_encoding(str_cast(blocks[idx].text)), scores[idx])
+                              for idx in ind if scores[idx] > self.cls_threshold]
                     # sort values by confidence
-                    output[label] = sorted(result, key=lambda x:x[1], reverse=True)
+                    output[label] = sorted(
+                        result, key=lambda x: x[1], reverse=True)
                 else:
                     mask = expit(preds[:, idx]) > self.binary_threshold
-                    ctx = fix_encoding(str_cast(b'\n'.join([ b.text for b in blocks[mask]])))
+                    ctx = fix_encoding(
+                        str_cast(b'\n'.join([b.text for b in blocks[mask]])))
                     if len(ctx) == 0:
                         ctx = None
                     output[label] = ctx
             outputs.append(output)
         return outputs
-
